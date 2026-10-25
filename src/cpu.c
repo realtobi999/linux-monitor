@@ -1,0 +1,128 @@
+#include <cpu.h>
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
+{
+    /*
+        Algorithm:
+        1. Open "/proc/stat" and read line by line  until  reaching  the  "intr"
+           section.
+        2. Filter lines starting with "cpu", distinguishing aggregate stat  from
+           individual cores.
+        3. Extract space-separated numerical ticks (user,  system,  idle,  etc.)
+           into the snapshot fields.
+        4. Store the snapshot in the array and increment the size counter.
+        5. Close the file and return true.
+    */
+    FILE* fptr = fopen("/proc/stat", "r");
+    if (fptr == NULL) {
+        return false;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), fptr))
+    {
+        if (strncmp(line, "intr", 4) == 0)
+        {
+            break;
+        }
+
+        if (strncmp(line, "cpu", 3) == 0)
+        {
+            int i = 3;
+
+            cpu_snapshot_t current_cpu = {0};
+            if (line[3] == ' ')
+            {
+                current_cpu.core_number = -1;
+                i += 1;
+            }
+            else
+            {
+                current_cpu.core_number = *snapshots_size - 1;
+
+                while (line[i] != '\0' && line[i] != ' ')
+                {
+                    i += 1;
+                }
+            }
+
+            while (line[i] != '\0' && current_cpu.fields_count < MAX_CPU_FIELDS)
+            {
+                while (line[i] != '\0' && !isdigit(line[i]))
+                {
+                    i += 1;
+                }
+
+                if (line[i] == '\0') {
+                    break;
+                }
+
+                char number[20];
+                int number_size = 0;
+
+                while (isdigit(line[i]) && number_size < (int)sizeof(number) - 1)
+                {
+                    number[number_size] = line[i];
+                    number_size += 1;
+                    i += 1;
+                }
+                number[number_size] = '\0';
+
+                current_cpu.fields[current_cpu.fields_count] = strtoull(number, NULL, 10);
+                current_cpu.fields_count += 1;
+            }
+
+            if (*snapshots_size < MAX_CPUS)
+            {
+                snapshots[*snapshots_size] = current_cpu;
+                *snapshots_size += 1;
+            }
+        }
+    }
+
+    fclose(fptr);
+
+    return true;
+}
+
+cpu_usage_t cpu_calculate_usage(int core_number, cpu_snapshot_t current_snapshot, cpu_snapshot_t previous_snapshot)
+{
+    /*
+        Algorithm:
+        1. Initialize a cpu_usage_t struct and set its core_number.
+        2. Iterate through all CPU statistic fields, calculating the tick  delta
+           (difference between current and previous snapshots) for each.
+        3. Accumulate the total delta and specific idle deltas (fields 3  and  4
+           representing idle and iowait).
+        4. If total_delta > 0, compute the  usage  percentage:  ((total_delta  -
+           idle_delta) / total_delta) * 100.0.
+        5. Return the populated cpu_usage_t struct.
+    */
+    cpu_usage_t cpu_usage;
+    cpu_usage.core_number = core_number;
+
+    int idle_delta = 0;
+    int total_delta = 0;
+
+    for (size_t j = 0; j < current_snapshot.fields_count; j++)
+    {
+        unsigned long long delta = current_snapshot.fields[j] - previous_snapshot.fields[j];
+
+        total_delta += delta;
+
+        if (j == 3 || j == 4)
+        {
+            idle_delta += delta;
+        }
+    }
+
+    if (total_delta > 0)
+    {
+        cpu_usage.usage = (double)(total_delta - idle_delta) / total_delta * 100.0;
+    }
+
+    return cpu_usage;
+}
