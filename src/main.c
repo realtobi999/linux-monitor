@@ -1,9 +1,9 @@
+#include <cpu.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include <cpu.h>
 
 int main(void)
 {
@@ -35,7 +35,7 @@ int main(void)
             is_first_iteration = false;
 
             /*  
-                Move the current snapshot as the previous for next iteration.
+                Set the current snapshot as the previous one for next iteration.
             */
             memcpy(previous_snapshots, current_snapshots, sizeof(current_snapshots));
             continue;
@@ -44,8 +44,8 @@ int main(void)
         /*
             Calculate the usage and print it out.
         */
-        size_t cpu_usage_size = 0;
-        cpu_usage_t cpu_usage [MAX_CPUS];
+        size_t snapshot_usages_size = 0;
+        cpu_usage_t snapshot_usages [MAX_CPUS];
         for (size_t i = 0; i < current_snapshots_size; i++)
         {
             cpu_snapshot_t current = current_snapshots[i];
@@ -55,25 +55,33 @@ int main(void)
             {
                 return EXIT_FAILURE;
             }
+            
+            cpu_usage_t snapshot_usage;
+            snapshot_usage.core_number = current.core_number;
 
-            cpu_usage[cpu_usage_size] = cpu_calculate_usage(current.core_number, current, previous);
-            cpu_usage_size += 1;
+            if (!cpu_calculate_usage(current, previous, &snapshot_usage))
+            {
+                return EXIT_FAILURE;
+            }
+
+            snapshot_usages[snapshot_usages_size] = snapshot_usage;
+            snapshot_usages_size += 1;
         }
 
-        for (size_t i = 0; i < cpu_usage_size; i++)
+        for (size_t i = 0; i < snapshot_usages_size; i++)
         {
             if (i == 0)
             {
-                printf("[*] / core total\t%.2f%%\n\n", cpu_usage[i].usage);
+                printf("[*] / core total\t%.2f%%\n\n", snapshot_usages[i].usage);
             }
             else
             {
-                printf("[*] / core %d.\t\t%.2f%%\n", cpu_usage[i].core_number + 1, cpu_usage[i].usage);
+                printf("[*] / core %d.\t\t%.2f%%\n", snapshot_usages[i].core_number + 1, snapshot_usages[i].usage);
             }
         }
         
         /*
-            Move the current snapshot as the previous for next iteration.
+            Set the current snapshot as the previous one for next iteration.
         */
         memcpy(previous_snapshots, current_snapshots, sizeof(current_snapshots));
     }

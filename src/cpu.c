@@ -1,13 +1,12 @@
 #include <cpu.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <ctype.h>
 
 bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
 {
     /*
-        Algorithm:
         1. Open "/proc/stat" and read line by line  until  reaching  the  "intr"
            section.
         2. Filter lines starting with "cpu", distinguishing aggregate stat  from
@@ -89,29 +88,27 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
     return true;
 }
 
-cpu_usage_t cpu_calculate_usage(int core_number, cpu_snapshot_t current_snapshot, cpu_snapshot_t previous_snapshot)
+bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previous_snapshot, cpu_usage_t* snapshot_usage)
 {
     /*
-        Algorithm:
-        1. Initialize a cpu_usage_t struct and set its core_number.
-        2. Iterate through all CPU statistic fields, calculating the tick  delta
+        1. Iterate through all CPU statistic fields, calculating the tick  delta
            (difference between current and previous snapshots) for each.
-        3. Accumulate the total delta and specific idle deltas (fields 3  and  4
+        2. Accumulate the total delta and specific idle deltas (fields 3  and  4
            representing idle and iowait).
-        4. If total_delta > 0, compute the  usage  percentage:  ((total_delta  -
+        3. If total_delta > 0, compute the  usage  percentage:  ((total_delta  -
            idle_delta) / total_delta) * 100.0.
-        5. Return the populated cpu_usage_t struct.
     */
-    cpu_usage_t cpu_usage;
-    cpu_usage.core_number = core_number;
-
     uint64_t idle_delta = 0;
     uint64_t total_delta = 0;
 
     for (size_t j = 0; j < current_snapshot.fields_count; j++)
     {
-        uint64_t delta = current_snapshot.fields[j] - previous_snapshot.fields[j];
+        if (current_snapshot.fields[j] < previous_snapshot.fields[j])
+        {
+            return false;
+        }
 
+        uint64_t delta = current_snapshot.fields[j] - previous_snapshot.fields[j];
         total_delta += delta;
 
         if (j == 3 || j == 4)
@@ -120,10 +117,12 @@ cpu_usage_t cpu_calculate_usage(int core_number, cpu_snapshot_t current_snapshot
         }
     }
 
-    if (total_delta > 0)
+    if (total_delta == 0)
     {
-        cpu_usage.usage = (double)(total_delta - idle_delta) / total_delta * 100.0;
+        return false;       
     }
+    
+    (*snapshot_usage).usage = (double)(total_delta - idle_delta) / total_delta * 100.0;
 
-    return cpu_usage;
+    return true;
 }
