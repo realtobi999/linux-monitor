@@ -16,8 +16,8 @@ int main(void)
         /*
             Clear up and wait.
         */
-        system("clear");
         sleep(1);
+        system("clear");
         
         /*
             Read the snapshots.

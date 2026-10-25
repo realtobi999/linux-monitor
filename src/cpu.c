@@ -1,6 +1,7 @@
 #include <cpu.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <ctype.h>
 
 bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
@@ -71,7 +72,7 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
                 }
                 number[number_size] = '\0';
 
-                current_cpu.fields[current_cpu.fields_count] = strtoull(number, NULL, 10);
+                current_cpu.fields[current_cpu.fields_count] = (uint64_t)strtoull(number, NULL, 10);
                 current_cpu.fields_count += 1;
             }
 
@@ -104,12 +105,12 @@ cpu_usage_t cpu_calculate_usage(int core_number, cpu_snapshot_t current_snapshot
     cpu_usage_t cpu_usage;
     cpu_usage.core_number = core_number;
 
-    int idle_delta = 0;
-    int total_delta = 0;
+    uint64_t idle_delta = 0;
+    uint64_t total_delta = 0;
 
     for (size_t j = 0; j < current_snapshot.fields_count; j++)
     {
-        unsigned long long delta = current_snapshot.fields[j] - previous_snapshot.fields[j];
+        uint64_t delta = current_snapshot.fields[j] - previous_snapshot.fields[j];
 
         total_delta += delta;
 

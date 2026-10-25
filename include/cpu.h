@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MAX_CPU_FIELDS 10
 #define MAX_CPUS 50
@@ -10,7 +11,7 @@
 typedef struct cpu_snapshot {
     int core_number;
     size_t fields_count;
-    double fields [MAX_CPU_FIELDS];
+    uint64_t fields [MAX_CPU_FIELDS];
 } cpu_snapshot_t;
 
 typedef struct cpu_usage {
