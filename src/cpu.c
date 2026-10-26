@@ -4,7 +4,50 @@
 #include <string.h>
 #include <stdint.h>
 
-bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
+/*
+    Internals - prototypes.
+*/
+
+static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int* i);
+
+/*
+    Internals - implementation.
+*/
+
+static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int *i)
+{
+    while (line[*i] != '\0' && (*current_cpu).fields_count < MAX_CPU_FIELDS)
+    {
+        while (line[*i] != '\0' && !isdigit(line[*i]))
+        {
+            *i += 1;
+        }
+
+        if (line[*i] == '\0') {
+            break;
+        }
+
+        char number[20];
+        int number_size = 0;
+
+        while (isdigit(line[*i]) && number_size < (int)sizeof(number) - 1)
+        {
+            number[number_size] = line[*i];
+            number_size += 1;
+            *i += 1;
+        }
+        number[number_size] = '\0';
+
+        (*current_cpu).fields[(*current_cpu).fields_count] = (uint64_t)strtoull(number, NULL, 10);
+        (*current_cpu).fields_count += 1;
+    }
+}
+
+/*
+    Exposed.
+*/
+
+bool cpu_read_snapshot(cpu_snapshot_t snapshots [], size_t* snapshots_size)
 {
     /*
         1. Open "/proc/stat" and read line by line  until  reaching  the  "intr"
@@ -21,6 +64,12 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
         return false;
     }
 
+    if (snapshots == NULL || snapshots_size == NULL)
+    {
+        return false;
+    }
+    *snapshots_size = 0;
+
     char line[256];
     while (fgets(line, sizeof(line), fptr))
     {
@@ -29,57 +78,31 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots[], size_t* snapshots_size)
             break;
         }
 
-        if (strncmp(line, "cpu", 3) == 0)
+        if (strncmp(line, "cpu", 3) != 0)
         {
-            int i = 3;
+            continue;
+        }
 
-            cpu_snapshot_t current_cpu = {0};
-            if (line[3] == ' ')
-            {
-                current_cpu.core_number = -1;
-                i += 1;
-            }
-            else
-            {
-                current_cpu.core_number = *snapshots_size - 1;
+        int i = 3;
 
-                while (line[i] != '\0' && line[i] != ' ')
-                {
-                    i += 1;
-                }
-            }
+        cpu_snapshot_t current_snapshot = {0};
+        if (line[3] == ' ')
+        {
+            current_snapshot.core_number = -1;
+            i += 1;
+        }
+        else
+        {
+            current_snapshot.core_number = *snapshots_size - 1;
+            while (line[i] != ' ') i += 1;
+        }
 
-            while (line[i] != '\0' && current_cpu.fields_count < MAX_CPU_FIELDS)
-            {
-                while (line[i] != '\0' && !isdigit(line[i]))
-                {
-                    i += 1;
-                }
+        parse_snapshot_fields(line, &i, &current_snapshot);
 
-                if (line[i] == '\0') {
-                    break;
-                }
-
-                char number[20];
-                int number_size = 0;
-
-                while (isdigit(line[i]) && number_size < (int)sizeof(number) - 1)
-                {
-                    number[number_size] = line[i];
-                    number_size += 1;
-                    i += 1;
-                }
-                number[number_size] = '\0';
-
-                current_cpu.fields[current_cpu.fields_count] = (uint64_t)strtoull(number, NULL, 10);
-                current_cpu.fields_count += 1;
-            }
-
-            if (*snapshots_size < MAX_CPUS)
-            {
-                snapshots[*snapshots_size] = current_cpu;
-                *snapshots_size += 1;
-            }
+        if (*snapshots_size < MAX_CPUS)
+        {
+            snapshots[*snapshots_size] = current_snapshot;
+            *snapshots_size += 1;
         }
     }
 
