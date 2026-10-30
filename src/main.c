@@ -9,7 +9,7 @@ int main(void)
 {
     bool is_first_iteration = true;
     
-    cpu_snapshot_t previous_snapshots[MAX_CPUS];
+    cpu_snapshot_t previous_snapshots[MAX_SNAPSHOT];
 
     while (true)
     {
@@ -23,9 +23,9 @@ int main(void)
             Read the snapshots.
         */
         size_t current_snapshots_size = 0;
-        cpu_snapshot_t current_snapshots[MAX_CPUS];
+        cpu_snapshot_t current_snapshots[MAX_SNAPSHOT];
 
-        if (!cpu_read_snapshot(current_snapshots, &current_snapshots_size))
+        if (!cpu_read_snapshots(current_snapshots, &current_snapshots_size))
         {
             return EXIT_FAILURE;
         }
@@ -44,8 +44,8 @@ int main(void)
         /*
             Calculate the usage and print it out.
         */
-        size_t snapshot_usages_size = 0;
-        cpu_usage_t snapshot_usages [MAX_CPUS];
+        size_t cpu_usages_size = 0;
+        cpu_snapshot_usage_t cpu_usages [MAX_SNAPSHOT];
         for (size_t i = 0; i < current_snapshots_size; i++)
         {
             cpu_snapshot_t current = current_snapshots[i];
@@ -56,27 +56,27 @@ int main(void)
                 return EXIT_FAILURE;
             }
             
-            cpu_usage_t snapshot_usage;
-            snapshot_usage.core_number = current.core_number;
+            cpu_snapshot_usage_t cpu_usage;
+            cpu_usage.core_number = current.core_number;
 
-            if (!cpu_calculate_usage(current, previous, &snapshot_usage))
+            if (!cpu_calculate_usage(current, previous, &cpu_usage))
             {
                 return EXIT_FAILURE;
             }
 
-            snapshot_usages[snapshot_usages_size] = snapshot_usage;
-            snapshot_usages_size += 1;
+            cpu_usages[cpu_usages_size] = cpu_usage;
+            cpu_usages_size += 1;
         }
 
-        for (size_t i = 0; i < snapshot_usages_size; i++)
+        for (size_t i = 0; i < cpu_usages_size; i++)
         {
             if (i == 0)
             {
-                printf("[*] / core total\t%.2f%%\n\n", snapshot_usages[i].usage);
+                printf("[*] / core total\t%.2f%%\n\n", cpu_usages[i].usage * 100);
             }
             else
             {
-                printf("[*] / core %d.\t\t%.2f%%\n", snapshot_usages[i].core_number + 1, snapshot_usages[i].usage);
+                printf("[*] / core %d.\t\t%.2f%%\n", cpu_usages[i].core_number + 1, cpu_usages[i].usage * 100);
             }
         }
         

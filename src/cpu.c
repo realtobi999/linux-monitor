@@ -8,17 +8,18 @@
     Internals - prototypes.
 */
 
-static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int* i);
+static bool parse_snapshot_fields(cpu_snapshot_t* current_snapshot, char line [], int* i);
+static bool parse_snapshot_core_number(size_t snapshots_size, cpu_snapshot_t* current_snapshot, char line [], int* i);
 
 /*
     Internals - implementation.
 */
 
-static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int *i)
+static bool parse_snapshot_fields(cpu_snapshot_t* current_snapshot, char line[], int *i)
 {
-    while (line[*i] != '\0' && (*current_cpu).fields_count < MAX_CPU_FIELDS)
+    while (line[*i] != '\0')
     {
-        while (line[*i] != '\0' && !isdigit(line[*i]))
+        while (line[*i] != '\0' && !isdigit((unsigned char)line[*i]))
         {
             *i += 1;
         }
@@ -27,10 +28,15 @@ static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int
             break;
         }
 
-        char number[20];
-        int number_size = 0;
+        if ((*current_snapshot).fields_count >= MAX_CPU_FIELDS)
+        {
+            return false;
+        }
 
-        while (isdigit(line[*i]) && number_size < (int)sizeof(number) - 1)
+        int number_size = 0;
+        char number[20];
+
+        while (isdigit((unsigned char)line[*i]) && number_size < (int)sizeof(number) - 1)
         {
             number[number_size] = line[*i];
             number_size += 1;
@@ -38,16 +44,72 @@ static void parse_snapshot_fields(cpu_snapshot_t* current_cpu, char line [], int
         }
         number[number_size] = '\0';
 
-        (*current_cpu).fields[(*current_cpu).fields_count] = (uint64_t)strtoull(number, NULL, 10);
-        (*current_cpu).fields_count += 1;
+        (*current_snapshot).fields[(*current_snapshot).fields_count] = (uint64_t)strtoull(number, NULL, 10);
+        (*current_snapshot).fields_count += 1;
     }
+
+    return true;
+}
+
+static bool parse_snapshot_core_number(size_t snapshots_size, cpu_snapshot_t* current_snapshot, char line [], int* i)
+{
+    if (strstr(line, "cpu "))
+    {
+        (*current_snapshot).core_number = -1;
+        *i += 1;
+    }
+    else if (strstr(line, "cpu") && line[3] != ' ')
+    {
+        (*current_snapshot).core_number = snapshots_size - 1;
+        while (line[*i] != ' ') 
+        {
+            *i += 1;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    return true;
 }
 
 /*
     Exposed.
 */
 
-bool cpu_read_snapshot(cpu_snapshot_t snapshots [], size_t* snapshots_size)
+bool cpu_get_snapshot(cpu_snapshot_t* snapshot, int core_number)
+{
+    if (core_number < -1)
+    {
+        return false;
+    }
+
+    size_t snapshots_size = 0;
+    cpu_snapshot_t snapshots[MAX_SNAPSHOT];
+
+    if (!cpu_read_snapshots(snapshots, &snapshots_size))
+    {
+        return EXIT_FAILURE;
+    }
+
+    for (size_t i = 0; i < snapshots_size; i++)
+    {
+        if (core_number == snapshots[i].core_number)
+        {
+            *snapshot = snapshots[i];
+        }
+    }
+
+    return true;
+}
+
+bool cpu_get_core_snapshot(cpu_snapshot_t* snapshot)
+{
+    return cpu_get_snapshot(snapshot, -1);
+}
+
+bool cpu_read_snapshots(cpu_snapshot_t snapshots[], size_t *snapshots_size)
 {
     /*
         1. Open "/proc/stat" and read line by line  until  reaching  the  "intr"
@@ -59,16 +121,16 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots [], size_t* snapshots_size)
         4. Store the snapshot in the array and increment the size counter.
         5. Close the file and return true.
     */
-    FILE* fptr = fopen("/proc/stat", "r");
-    if (fptr == NULL) {
-        return false;
-    }
-
     if (snapshots == NULL || snapshots_size == NULL)
     {
         return false;
     }
+
     *snapshots_size = 0;
+    FILE* fptr = fopen("/proc/stat", "r");
+    if (fptr == NULL) {
+        return false;
+    }
 
     char line[256];
     while (fgets(line, sizeof(line), fptr))
@@ -86,20 +148,16 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots [], size_t* snapshots_size)
         int i = 3;
 
         cpu_snapshot_t current_snapshot = {0};
-        if (line[3] == ' ')
+        if (!parse_snapshot_core_number(*snapshots_size, &current_snapshot, line, &i))
         {
-            current_snapshot.core_number = -1;
-            i += 1;
+            return false;
         }
-        else
+        if (!parse_snapshot_fields(&current_snapshot, line, &i))
         {
-            current_snapshot.core_number = *snapshots_size - 1;
-            while (line[i] != ' ') i += 1;
+            return false;
         }
 
-        parse_snapshot_fields(line, &i, &current_snapshot);
-
-        if (*snapshots_size < MAX_CPUS)
+        if (*snapshots_size < MAX_SNAPSHOT)
         {
             snapshots[*snapshots_size] = current_snapshot;
             *snapshots_size += 1;
@@ -111,7 +169,7 @@ bool cpu_read_snapshot(cpu_snapshot_t snapshots [], size_t* snapshots_size)
     return true;
 }
 
-bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previous_snapshot, cpu_usage_t* snapshot_usage)
+bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previous_snapshot, cpu_snapshot_usage_t* snapshot_usage)
 {
     /*
         1. Iterate through all CPU statistic fields, calculating the tick  delta
@@ -121,8 +179,23 @@ bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previou
         3. If total_delta > 0, compute the  usage  percentage:  ((total_delta  -
            idle_delta) / total_delta) * 100.0.
     */
+    
+    if (current_snapshot.core_number != previous_snapshot.core_number)
+    {
+        return false;
+    }
+    if (snapshot_usage == NULL)
+    {
+        return false;
+    }
+
     uint64_t idle_delta = 0;
     uint64_t total_delta = 0;
+
+    if (current_snapshot.fields_count < previous_snapshot.fields_count)
+    {
+        return false;
+    }
 
     for (size_t j = 0; j < current_snapshot.fields_count; j++)
     {
@@ -145,7 +218,7 @@ bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previou
         return false;       
     }
     
-    (*snapshot_usage).usage = (double)(total_delta - idle_delta) / total_delta * 100.0;
+    (*snapshot_usage).usage = (double)(total_delta - idle_delta) / total_delta;
 
     return true;
 }
