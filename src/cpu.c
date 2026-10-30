@@ -28,7 +28,7 @@ static bool parse_snapshot_fields(cpu_snapshot_t* current_snapshot, char line[],
             break;
         }
 
-        if ((*current_snapshot).fields_count >= MAX_CPU_FIELDS)
+        if ((*current_snapshot).fields_count >= MAX_SNAPSHOT_FIELDS)
         {
             return false;
         }
@@ -90,7 +90,7 @@ bool cpu_get_snapshot(cpu_snapshot_t* snapshot, int core_number)
 
     if (!cpu_read_snapshots(snapshots, &snapshots_size))
     {
-        return EXIT_FAILURE;
+        return false;
     }
 
     for (size_t i = 0; i < snapshots_size; i++)
@@ -150,10 +150,12 @@ bool cpu_read_snapshots(cpu_snapshot_t snapshots[], size_t *snapshots_size)
         cpu_snapshot_t current_snapshot = {0};
         if (!parse_snapshot_core_number(*snapshots_size, &current_snapshot, line, &i))
         {
+            fclose(fptr);
             return false;
         }
         if (!parse_snapshot_fields(&current_snapshot, line, &i))
         {
+            fclose(fptr);
             return false;
         }
 
@@ -165,7 +167,6 @@ bool cpu_read_snapshots(cpu_snapshot_t snapshots[], size_t *snapshots_size)
     }
 
     fclose(fptr);
-
     return true;
 }
 
@@ -192,7 +193,7 @@ bool cpu_calculate_usage(cpu_snapshot_t current_snapshot, cpu_snapshot_t previou
     uint64_t idle_delta = 0;
     uint64_t total_delta = 0;
 
-    if (current_snapshot.fields_count < previous_snapshot.fields_count)
+    if (current_snapshot.fields_count != previous_snapshot.fields_count)
     {
         return false;
     }

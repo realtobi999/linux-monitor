@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define MAX_CPU_FIELDS 10
 #define MAX_SNAPSHOT 50
+#define MAX_SNAPSHOT_FIELDS 10
 
 /// @brief Raw CPU counters for one core or for the aggregate CPU.
 typedef struct cpu_snapshot {
@@ -15,7 +15,7 @@ typedef struct cpu_snapshot {
     /// Number of valid counters stored in fields.
     size_t fields_count;
     /// CPU counters. Only the first fields_count entries are valid.
-    uint64_t fields [MAX_CPU_FIELDS];
+    uint64_t fields [MAX_SNAPSHOT_FIELDS];
 } cpu_snapshot_t;
 
 /// @brief Calculated CPU usage associated with a core or aggregate CPU.
@@ -38,7 +38,7 @@ bool cpu_get_snapshot(cpu_snapshot_t* snapshot, int core_number);
 bool cpu_get_core_snapshot(cpu_snapshot_t* snapshot);
 
 /// @brief Reads a snapshot of CPU statistics into the provided array.
-/// @param snapshots Buffer of cpu_snapshot_t entries to populate. The maximum number of entries is MAX_CPU_FIELDS.
+/// @param snapshots Buffer of cpu_snapshot_t entries to populate. The maximum number of entries is MAX_SNAPSHOT_FIELDS.
 /// @param snapshots_size Pointer to the number of entries available in the array on input and the number actually written on output.
 /// @return True if the snapshot was read successfully, False otherwise.
 bool cpu_read_snapshots(cpu_snapshot_t snapshots [], size_t* snapshots_size);
